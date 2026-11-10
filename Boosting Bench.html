@@ -1,0 +1,800 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Boosting Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap">
+<style>
+/* Layout: a lab bench. Guided-tour rail on the left (sticky on wide screens), the experiment on the right:
+   controls, three probability maps side by side (the one bold element), then two quiet diagnostic charts. */
+:root{
+  --paper:#EEF1F4; --surface:#FBFCFD; --wash:#E3E8EE; --ink:#16202C; --ink-2:#536173; --rule:#D3DAE2;
+  --pos:#1F56C9; --neg:#D9860A; --heat-mid:#FBFCFD;
+  --ls:#7B4FB0; --ada:#C2304F; --logit:#0D8572;
+  --f-display:"Newsreader","Iowan Old Style",Georgia,serif;
+  --f-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0E1217; --surface:#151B22; --wash:#1C232C; --ink:#E4E9EF; --ink-2:#97A3B2; --rule:#2A333E;
+  --pos:#6F9DFF; --neg:#F0AE3C; --heat-mid:#151B22;
+  --ls:#B595E6; --ada:#F27891; --logit:#3BC4AE; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --paper:#0E1217; --surface:#151B22; --wash:#1C232C; --ink:#E4E9EF; --ink-2:#97A3B2; --rule:#2A333E;
+  --pos:#6F9DFF; --neg:#F0AE3C; --heat-mid:#151B22;
+  --ls:#B595E6; --ada:#F27891; --logit:#3BC4AE; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5}
+.wrap{max-width:1500px;margin:0 auto;padding-block:28px 56px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.m{font-family:var(--f-display);font-style:italic;font-size:1.06em;white-space:nowrap}
+sup{font-size:.7em;line-height:0}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--pos);outline-offset:2px}
+
+/* masthead */
+.mast{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;margin-bottom:24px;max-width:72ch}
+h1{font-family:var(--f-display);font-weight:500;font-size:clamp(2rem,3.4vw,2.9rem);line-height:1.05;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.lede{margin:0;color:var(--ink-2);font-size:1.02rem}
+
+.layout{display:grid;grid-template-columns:350px minmax(0,1fr);gap:32px;align-items:start}
+@media (max-width:1180px){.layout{grid-template-columns:minmax(0,1fr)}}
+
+/* tour rail */
+.rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);max-height:calc(100vh - 32px);overflow:auto;
+  background:var(--surface);border:1px solid var(--rule);padding:20px 20px 18px;display:grid;gap:14px}
+@media (max-width:1180px){.rail{position:static;max-height:none}}
+.rail-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.rail-top h2{font-family:var(--f-display);font-weight:500;font-size:1.15rem;margin:0}
+.rail-top span{color:var(--ink-2);font-size:13px;font-variant-numeric:tabular-nums}
+.steps{display:flex;flex-wrap:wrap;gap:5px;margin:0;padding:0;list-style:none}
+.steps button{width:32px;height:32px;border:1px solid var(--rule);background:var(--surface);cursor:pointer;
+  font-variant-numeric:tabular-nums;font-size:14px;border-radius:50%}
+.steps button[aria-current="step"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.steps button.seen:not([aria-current]){background:var(--wash)}
+.lesson h3{font-family:var(--f-display);font-weight:500;font-size:1.5rem;line-height:1.15;margin:0 0 10px;text-wrap:balance}
+.lesson p{margin:0 0 10px}
+.lesson .look{border-left:2px solid var(--rule);padding-left:12px;margin:12px 0}
+.lesson .look b{font-weight:600}
+.lesson-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--ink);background:var(--ink);color:var(--surface);padding:7px 14px;cursor:pointer;font-weight:500;font-size:14px}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--rule)}
+.btn:disabled{opacity:.4;cursor:default}
+.refs{font-size:12.5px;color:var(--ink-2);border-top:1px solid var(--rule);padding-top:12px;margin:0}
+
+/* controls */
+.lab{display:grid;gap:22px;min-width:0}
+.controls{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:flex-end;padding-bottom:18px;border-bottom:1px solid var(--rule)}
+.ctl{display:grid;gap:6px}
+.ctl > .lbl{font-size:13px;color:var(--ink-2)}
+.ctl output{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:500}
+.seg{display:inline-flex;border:1px solid var(--rule);background:var(--surface)}
+.seg button{border:0;background:transparent;padding:6px 12px;cursor:pointer;font-size:14px}
+.seg button + button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+input[type=range]{accent-color:var(--ink);width:150px}
+.checks{display:flex;gap:18px;flex-wrap:wrap;font-size:14px}
+.checks label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.transport{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+.transport input[type=range]{flex:1 1 220px;width:auto;min-width:160px}
+.round{font-variant-numeric:tabular-nums;min-width:11ch;font-size:14px}
+.round b{font-family:var(--f-display);font-size:1.35rem;font-weight:500}
+
+.key{display:flex;flex-wrap:wrap;gap:6px 22px;font-size:13px;color:var(--ink-2);align-items:center}
+.key i{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:6px}
+.key .hollow{background:transparent;border:1.5px solid var(--pos)}
+.key .bound{width:18px;height:0;border-radius:0;border-top:2px solid var(--ink);vertical-align:3px}
+.key .split{width:18px;height:0;border-radius:0;border-top:1.5px dashed var(--ink-2);vertical-align:3px}
+
+/* the three maps */
+.panels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(6,auto);column-gap:18px;row-gap:0}
+.panel{display:grid;grid-row:span 6;grid-template-rows:subgrid;min-width:0}
+@media (max-width:760px){.panels{grid-template-columns:minmax(0,1fr)}.panel{margin-bottom:26px}}
+.ph{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.ph h3{font-family:var(--f-display);font-weight:500;font-size:1.35rem;margin:0;line-height:1.1}
+.sw{width:22px;height:3px;flex:none}
+.rule{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;margin:0 0 10px;font-size:13.5px;align-content:start}
+.rule dt{color:var(--ink-2)}
+.rule dd{margin:0}
+.cv-wrap{position:relative;aspect-ratio:1;max-width:100%;border:1px solid var(--rule);background:var(--surface)}
+.cv-wrap canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.nums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:10px 0 6px;border-bottom:1px solid var(--rule)}
+.nums div{display:grid}
+.nums .k{font-size:12px;color:var(--ink-2)}
+.nums .v{font-size:1.15rem;font-variant-numeric:tabular-nums;font-weight:500}
+.latest,.cursor{margin:8px 0 0;font-size:13.5px;min-height:2.9em}
+.cursor{color:var(--ink-2)}
+.cursor b,.latest b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+
+/* charts */
+.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}
+@media (max-width:900px){.charts{grid-template-columns:minmax(0,1fr)}}
+.chart{min-width:0;display:grid;gap:8px;align-content:start}
+.chart-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.chart h3{font-family:var(--f-display);font-weight:500;font-size:1.2rem;margin:0}
+.chart p{margin:0;font-size:13.5px;color:var(--ink-2);max-width:68ch}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:18px;height:0;border-top:2.5px solid}
+.legend i.dash{border-top-style:dashed;border-top-width:1.5px}
+.chart canvas{width:100%;height:310px;display:block;background:var(--surface);border:1px solid var(--rule)}
+#curveCv{cursor:pointer;touch-action:none}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <h1>Boosting Bench</h1>
+    <p class="lede">Least squares boosting, AdaBoost and LogitBoost, trained side by side on the same data with the same decision trees. The only thing that differs is the loss each one minimizes. Follow the tour on the left, or change anything and watch what happens.</p>
+  </header>
+
+  <div class="layout">
+    <aside class="rail" aria-label="Guided tour">
+      <div class="rail-top"><h2>Guided tour</h2><span id="tourCount"></span></div>
+      <ol class="steps" id="steps"></ol>
+      <article class="lesson" id="lesson" aria-live="polite"></article>
+      <div class="lesson-actions">
+        <button class="btn" id="setupBtn" type="button">Set up this view</button>
+        <button class="btn ghost" id="prevBtn" type="button">Previous</button>
+        <button class="btn ghost" id="nextBtn" type="button">Next</button>
+      </div>
+      <p class="refs">Further reading: Friedman, Hastie &amp; Tibshirani, “Additive logistic regression: a statistical view of boosting,” <i>Annals of Statistics</i> (2000); Hastie, Tibshirani &amp; Friedman, <i>Elements of Statistical Learning</i>, ch. 10; Murphy, <i>Probabilistic Machine Learning: An Introduction</i>, sec. 18.5.</p>
+    </aside>
+
+    <main class="lab">
+      <div class="controls">
+        <div class="ctl"><span class="lbl">Dataset</span>
+          <div class="seg" id="dsSeg" role="group" aria-label="Dataset">
+            <button type="button" data-v="moons">Moons</button><button type="button" data-v="ring">Ring</button><button type="button" data-v="xor">XOR</button><button type="button" data-v="blobs">Overlapping blobs</button>
+          </div></div>
+        <div class="ctl"><label class="lbl" for="noise">Flipped labels <output id="noiseOut"></output></label>
+          <input type="range" id="noise" min="0" max="30" step="1"></div>
+        <div class="ctl"><span class="lbl">Tree depth</span>
+          <div class="seg" id="depthSeg" role="group" aria-label="Tree depth">
+            <button type="button" data-v="1">1 (stump)</button><button type="button" data-v="2">2</button><button type="button" data-v="3">3</button>
+          </div></div>
+        <div class="ctl"><label class="lbl" for="nu">Learning rate <span class="m">ν</span> = <output id="nuOut"></output></label>
+          <input type="range" id="nu" min="0" max="5" step="1"></div>
+        <div class="ctl"><span class="lbl">Clicking a map</span>
+          <div class="seg" id="addSeg" role="group" aria-label="Clicking a map">
+            <button type="button" data-v="off">Inspects</button><button type="button" data-v="1">Adds y = +1</button><button type="button" data-v="-1">Adds y = −1</button>
+          </div></div>
+        <div class="ctl"><span class="lbl">Data</span><button class="btn ghost" id="reseed" type="button">Draw a new sample</button></div>
+      </div>
+
+      <div class="transport">
+        <button class="btn ghost" id="backBtn" type="button">Back</button>
+        <button class="btn" id="playBtn" type="button">Play</button>
+        <button class="btn ghost" id="stepBtn" type="button">Step</button>
+        <input type="range" id="roundSlider" min="0" max="200" step="1" aria-label="Boosting round">
+        <span class="round">Round <b id="roundOut">0</b> of 200</span>
+      </div>
+
+      <div class="key">
+        <span><i style="background:var(--pos)"></i>y = +1</span>
+        <span><i style="background:var(--neg)"></i>y = −1</span>
+        <span>Shading: <span class="m">p̂</span>(y = +1 | x)</span>
+        <span><i class="bound"></i>Decision boundary, <span class="m">p̂</span> = 0.5</span>
+        <span><i class="split"></i>Splits of the newest tree</span>
+        <span><i class="hollow"></i>Least squares only: <span class="m">y·f</span> &gt; 1, pulled back</span>
+        <span>Point size: pull, the point’s share of what the next tree fits</span>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="showTree"> Show newest tree’s splits</label>
+        <label><input type="checkbox" id="sizePull"> Size points by pull</label>
+      </div>
+
+      <div class="panels" id="panels"></div>
+
+      <div class="charts">
+        <section class="chart">
+          <div class="chart-head"><h3>Loss against margin</h3></div>
+          <p>Each loss as a function of the margin <span class="m">y·f(x)</span>, scaled to equal 1 at zero margin. Tick rows underneath show where each model’s training points sit right now.</p>
+          <div class="legend">
+            <span><i style="border-color:var(--ls)"></i>Squared (least squares)</span>
+            <span><i style="border-color:var(--ada)"></i>Exponential (AdaBoost)</span>
+            <span><i style="border-color:var(--logit)"></i>Deviance ÷ ln 2 (LogitBoost)</span>
+            <span><i class="dash" style="border-color:var(--ink-2)"></i>0–1 loss</span>
+          </div>
+          <canvas id="marginCv" aria-label="Loss as a function of margin, with training margins"></canvas>
+        </section>
+        <section class="chart">
+          <div class="chart-head"><h3>Held-out performance by round</h3>
+            <div class="seg" id="metricSeg" role="group" aria-label="Metric">
+              <button type="button" data-v="err">Error rate</button><button type="button" data-v="ll">Log loss</button>
+            </div></div>
+          <p>Solid lines: 1,000 fresh test points from the same distribution. Dashed: training set. Click or drag to jump to a round.</p>
+          <div class="legend">
+            <span><i style="border-color:var(--ls)"></i>Least squares</span>
+            <span><i style="border-color:var(--ada)"></i>AdaBoost</span>
+            <span><i style="border-color:var(--logit)"></i>LogitBoost</span>
+          </div>
+          <canvas id="curveCv" aria-label="Test and training metric by boosting round"></canvas>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+// CORE START
+const M_MAX = 200;
+const DOM = [-1.25, 1.25];
+const METHODS = ['ls', 'ada', 'logit'];
+const NUS = [0.05, 0.1, 0.2, 0.3, 0.5, 1];
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+function gauss(r){let u=0;while(u===0)u=r();const v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+const clampD = v => Math.max(-1.2, Math.min(1.2, v));
+
+const GEN = {
+  moons(r){
+    const y = r() < 0.5 ? 1 : -1, t = Math.PI * r();
+    let a, b;
+    if (y === 1){ a = Math.cos(t); b = Math.sin(t); } else { a = 1 - Math.cos(t); b = 0.5 - Math.sin(t); }
+    return {x:[(a - 0.5) * 0.72 + gauss(r) * 0.09, (b - 0.25) * 0.95 + gauss(r) * 0.09], y};
+  },
+  ring(r){
+    const x1 = (r() * 2 - 1) * 1.15, x2 = (r() * 2 - 1) * 1.15;
+    return {x:[x1, x2], y: Math.hypot(x1, x2) < 0.68 ? 1 : -1};
+  },
+  xor(r){
+    const x1 = (r() * 2 - 1) * 1.15, x2 = (r() * 2 - 1) * 1.15;
+    return {x:[x1, x2], y: x1 * x2 > 0 ? 1 : -1};
+  },
+  blobs(r){
+    const y = r() < 0.5 ? 1 : -1, mu = 0.35 * y;
+    return {x:[mu + gauss(r) * 0.42, mu + gauss(r) * 0.42], y};
+  }
+};
+
+function makeData(name, n, seed, noise){
+  const r = mulberry32(seed), rf = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  const X = [], Y = [];
+  for (let i = 0; i < n; i++){
+    const p = GEN[name](r);
+    let y = p.y;
+    if (rf() < noise) y = -y;
+    X.push([clampD(p.x[0]), clampD(p.x[1])]); Y.push(y);
+  }
+  return {X, Y};
+}
+
+// Weighted least-squares regression tree. Leaf value = weighted mean of z.
+// s0 / s1 hold the node's indices pre-sorted by x1 / x2, so no sorting happens inside the loop.
+function fitTree(X, z, w, s0, s1, depth, minLeaf){
+  let sw = 0, swz = 0;
+  for (const i of s0){ sw += w[i]; swz += w[i] * z[i]; }
+  const v = sw > 0 ? swz / sw : 0;
+  if (depth === 0 || s0.length < 2 * minLeaf) return {v};
+  const base = sw > 0 ? swz * swz / sw : 0;
+  let best = null, bestGain = 1e-12 * Math.max(1, sw);
+  for (let f = 0; f < 2; f++){
+    const s = f ? s1 : s0;
+    let lw = 0, lwz = 0;
+    for (let k = 0; k < s.length - 1; k++){
+      const i = s[k]; lw += w[i]; lwz += w[i] * z[i];
+      const nl = k + 1;
+      if (nl < minLeaf || s.length - nl < minLeaf) continue;
+      const a = X[i][f], b = X[s[k + 1]][f];
+      if (b - a < 1e-12) continue;
+      const rw = sw - lw, rwz = swz - lwz;
+      if (lw <= 1e-15 || rw <= 1e-15) continue;
+      const gain = lwz * lwz / lw + rwz * rwz / rw - base;
+      if (gain > bestGain){ bestGain = gain; best = {f, t:(a + b) / 2}; }
+    }
+  }
+  if (!best) return {v};
+  const {f, t} = best, isL = i => X[i][f] <= t;
+  return {f, t, v,
+    l:fitTree(X, z, w, s0.filter(isL), s1.filter(isL), depth - 1, minLeaf),
+    r:fitTree(X, z, w, s0.filter(i => !isL(i)), s1.filter(i => !isL(i)), depth - 1, minLeaf)};
+}
+function evalTree(t, x1, x2){ while (t.l) t = ((t.f === 0 ? x1 : x2) <= t.t) ? t.l : t.r; return t.v; }
+function signLeaves(t){ if (t.l){ signLeaves(t.l); signLeaves(t.r); } else t.v = t.v >= 0 ? 1 : -1; }
+const sigmoid = x => 1 / (1 + Math.exp(-x));
+const EPS = 0.001;
+function probOf(method, F){
+  const p = method === 'ls' ? (1 + F) / 2 : sigmoid(2 * F);
+  return Math.min(1 - EPS, Math.max(EPS, p));
+}
+// A point's "pull": its contribution |w·z| to the target the next tree is fit to.
+// Least squares: |r|. AdaBoost: w = e^(-yf). LogitBoost: p(1-p)·|z|, with z clipped to [-4, 4].
+function pullOf(method, y, F){
+  if (method === 'ls') return Math.abs(y - F);
+  if (method === 'ada') return Math.exp(-y * F);
+  const p = sigmoid(2 * F), ys = (y + 1) / 2, w = Math.max(p * (1 - p), 1e-10);
+  return w * Math.min(4, Math.abs((ys - p) / w));
+}
+function metricsOf(method, F, Y, Ft, Yt){
+  const ls = method === 'ls', lo = EPS, hi = 1 - EPS;
+  function pass(FF, YY){
+    let e = 0, l = 0;
+    for (let i = 0; i < YY.length; i++){
+      const f = FF[i], y = YY[i];
+      if ((f > 0 ? 1 : -1) !== y) e++;
+      let p = ls ? (1 + f) / 2 : 1 / (1 + Math.exp(-2 * f));
+      p = p < lo ? lo : p > hi ? hi : p;
+      l -= Math.log(y > 0 ? p : 1 - p);
+    }
+    return [e / YY.length, l / YY.length];
+  }
+  const tr = pass(F, Y), te = pass(Ft, Yt);
+  return {trainErr:tr[0], testErr:te[0], trainLL:tr[1], testLL:te[1]};
+}
+function trainOne(method, X, Y, Xt, Yt, depth, nu){
+  const n = Y.length, nt = Yt.length, idx = [...Array(n).keys()];
+  const s0 = idx.slice().sort((a, b) => X[a][0] - X[b][0]), s1 = idx.slice().sort((a, b) => X[a][1] - X[b][1]);
+  const F = new Float64Array(n), Ft = new Float64Array(nt);
+  const z = new Float64Array(n), w = new Float64Array(n);
+  const Fs = [Float32Array.from(F)], trees = [null], info = [null], met = [metricsOf(method, F, Y, Ft, Yt)];
+  for (let m = 1; m <= M_MAX; m++){
+    const extra = {};
+    if (method === 'ls'){
+      let s = 0;
+      for (let i = 0; i < n; i++){ z[i] = Y[i] - F[i]; w[i] = 1; s += Math.abs(z[i]); }
+      extra.meanAbsRes = s / n;
+    } else if (method === 'ada'){
+      let mx = -Infinity;
+      for (let i = 0; i < n; i++) mx = Math.max(mx, -Y[i] * F[i]);
+      let s = 0;
+      for (let i = 0; i < n; i++){ w[i] = Math.exp(-Y[i] * F[i] - mx); s += w[i]; z[i] = Y[i]; }
+      let wmax = 0;
+      for (let i = 0; i < n; i++){ w[i] /= s; wmax = Math.max(wmax, w[i]); }
+      extra.maxShare = wmax * n;
+    } else {
+      let s = 0;
+      for (let i = 0; i < n; i++){
+        const p = sigmoid(2 * F[i]), ys = (Y[i] + 1) / 2, ww = Math.max(p * (1 - p), 1e-10);
+        w[i] = ww; z[i] = Math.max(-4, Math.min(4, (ys - p) / ww)); s += ww;
+      }
+      extra.meanW = s / n;
+    }
+    const tree = fitTree(X, z, w, s0, s1, depth, 3);
+    let scale;
+    if (method === 'ada'){
+      signLeaves(tree);
+      let e = 0;
+      for (let i = 0; i < n; i++) if (evalTree(tree, X[i][0], X[i][1]) !== Y[i]) e += w[i];
+      e = Math.min(Math.max(e, 1e-6), 1 - 1e-6);
+      const beta = 0.5 * Math.log((1 - e) / e);
+      scale = nu * beta; extra.err = e; extra.beta = beta;
+    } else scale = method === 'ls' ? nu : nu * 0.5;
+    for (let i = 0; i < n; i++) F[i] += scale * evalTree(tree, X[i][0], X[i][1]);
+    for (let j = 0; j < nt; j++) Ft[j] += scale * evalTree(tree, Xt[j][0], Xt[j][1]);
+    Fs.push(Float32Array.from(F)); trees.push({tree, scale}); info.push(extra);
+    met.push(metricsOf(method, F, Y, Ft, Yt));
+  }
+  return {Fs, trees, info, met};
+}
+// CORE END
+
+/* ---------------- state ---------------- */
+const S = {dataset:'moons', noise:0, depth:1, nuIdx:4, round:0, seed:7, showTree:true, sizePull:true,
+  addMode:'off', userPts:[], lesson:0, metric:'err', playing:false, hover:null, hoverPt:-1, seen:new Set([0])};
+let D = null, MODELS = null;
+
+const META = {
+  ls:{name:'Least squares', loss:'<span class="m">½(y − f)²</span>',
+      fits:'residuals <span class="m">r = y − f</span>', size:'<span class="m">|r|</span>', prob:'<span class="m">p̂ = (1 + f)/2</span>, clipped'},
+  ada:{name:'AdaBoost', loss:'<span class="m">e<sup>−yf</sup></span>',
+      fits:'labels, weights <span class="m">w ∝ e<sup>−yf</sup></span>; adds <span class="m">β·h</span>', size:'<span class="m">w</span>', prob:'<span class="m">p̂ = σ(2f)</span>'},
+  logit:{name:'LogitBoost', loss:'<span class="m">ln(1 + e<sup>−2yf</sup>)</span>',
+      fits:'<span class="m">z = (y* − p)/w</span>, weights <span class="m">w = p(1 − p)</span>', size:'<span class="m">w·|z|</span>, with <span class="m">|z| ≤ 4</span>', prob:'<span class="m">p̂ = σ(2f)</span>'}
+};
+
+/* ---------------- lessons ---------------- */
+const LESSONS = [
+ {title:'Same loop, different loss',
+  body:`<p>Every booster here builds an additive model <span class="m">f(x) = Σ<sub>m</sub> ν·tree<sub>m</sub>(x)</span>, adding one small tree per round and never revisiting the old ones. This is <i>forward stagewise additive modeling</i>.</p>
+  <p>What changes between the three panels is the loss <span class="m">L(y, f(x))</span> being reduced. That choice decides which points the next tree pays attention to, and it is the only difference here: same data, same trees, same learning rate.</p>
+  <p>At round 0, <span class="m">f = 0</span> everywhere, so every map says <span class="m">p̂ = 0.5</span>.</p>`,
+  look:'<b>Try:</b> press Step a few times. The dashed lines are the cuts made by the tree just added. With depth 1 each tree is a stump: one cut on <span class="m">x₁</span> or <span class="m">x₂</span>. Notice that even the first stump differs between panels.',
+  setup:{dataset:'moons', noise:0, depth:1, nuIdx:4, round:0}},
+ {title:'Least squares: chase the residual',
+  body:`<p>Least squares boosting minimizes <span class="m">½(y − f)²</span> with labels <span class="m">y ∈ {−1, +1}</span>. The negative gradient of that loss is the residual <span class="m">r = y − f</span>, so each new tree is an ordinary regression tree fit to the current residuals. Point size in the left map is <span class="m">|r|</span>.</p>
+  <p>The catch is that squared loss treats overshooting as an error. A point with <span class="m">y = +1</span> and <span class="m">f = 1.6</span> has residual −0.6, so the next tree pushes <span class="m">f</span> back down even though the point is classified correctly.</p>`,
+  look:'<b>Look for</b> hollow points in the left map. Those have margin <span class="m">y·f &gt; 1</span>: right, but “too right,” and pulled back toward the boundary. Hover one and compare its pull in all three panels.',
+  setup:{dataset:'moons', noise:0, depth:2, nuIdx:3, round:40}},
+ {title:'AdaBoost: reweight the data',
+  body:`<p>AdaBoost minimizes the exponential loss <span class="m">e<sup>−yf</sup></span>. Its gradient is the loss itself, so each point carries weight <span class="m">w<sub>i</sub> ∝ e<sup>−y<sub>i</sub>f(x<sub>i</sub>)</sup></span>. Every round fits a classification tree <span class="m">h</span> to the weighted data, measures its weighted error <span class="m">err</span>, and adds <span class="m">β·h</span> with <span class="m">β = ½ ln((1 − err)/err)</span>.</p>
+  <p>Each round a point stays misclassified, its weight multiplies by <span class="m">e<sup>β</sup></span>; each round it is right, it shrinks by <span class="m">e<sup>−β</sup></span>. Pull piles up quickly on the hard points near the boundary.</p>`,
+  look:'<b>Try:</b> this is classic AdaBoost (<span class="m">ν = 1</span>, stumps). Step through ten rounds and read the weighted error and <span class="m">β</span> under the middle map. Watch the largest weight grow.',
+  setup:{dataset:'moons', noise:0, depth:1, nuIdx:5, round:0}},
+ {title:'LogitBoost: Newton steps on the likelihood',
+  body:`<p>LogitBoost treats boosting as fitting a probability model, <span class="m">p(y = +1 | x) = σ(2f(x))</span>, by maximum likelihood. Its loss is the binomial deviance <span class="m">ln(1 + e<sup>−2yf</sup>)</span>, the negative log-likelihood.</p>
+  <p>Each round takes a Newton step: weights <span class="m">w<sub>i</sub> = p<sub>i</sub>(1 − p<sub>i</sub>)</span> from the curvature, working response <span class="m">z<sub>i</sub> = (y*<sub>i</sub> − p<sub>i</sub>)/w<sub>i</sub></span> with <span class="m">y* ∈ {0, 1}</span>, and a weighted regression tree fit to <span class="m">z</span>. It is iteratively reweighted least squares, one tree at a time.</p>
+  <p>The weight <span class="m">p(1 − p)</span> peaks at <span class="m">p = 0.5</span> and vanishes when the model is sure, whether it’s sure and right or sure and wrong. Friedman, Hastie and Tibshirani also clip <span class="m">|z| ≤ 4</span>. Together these mean a point the model has confidently misclassified contributes almost nothing to the next tree. AdaBoost does the opposite: its weight on that point grows exponentially.</p>`,
+  look:'<b>Compare</b> the middle and right maps on these overlapping classes. In AdaBoost the biggest points are the ones deepest in the other class’s territory. In LogitBoost the biggest points sit near the boundary, where <span class="m">p̂</span> is uncertain. Hover a deep orange point among the blue ones to read both pulls.',
+  setup:{dataset:'blobs', noise:0, depth:2, nuIdx:3, round:30}},
+ {title:'Read the margin',
+  body:`<p>The chart under the maps plots each loss against the margin <span class="m">m = y·f(x)</span>. Positive margins are correct predictions; negative ones are mistakes.</p>
+  <p>Exponential loss and deviance agree near zero, but for mistakes exponential grows like <span class="m">e<sup>−m</sup></span> while deviance grows only linearly. Squared loss is the only one that rises again once <span class="m">m &gt; 1</span>, which is why least squares can’t reward confidence.</p>`,
+  look:'<b>Try:</b> drag the round slider from 0 to 200 and watch the tick rows. Least squares margins bunch up around 1; AdaBoost and LogitBoost margins keep spreading to the right because their losses keep rewarding larger margins.',
+  setup:{dataset:'ring', noise:0, depth:2, nuIdx:3, round:60}},
+ {title:'Depth decides interactions',
+  body:`<p>With stumps, every tree depends on one feature, so the whole model is a sum <span class="m">f(x) = g₁(x₁) + g₂(x₂)</span>. That’s an additive model with no interactions.</p>
+  <p>XOR needs the sign of <span class="m">x₁</span> to flip the effect of <span class="m">x₂</span>. No sum of that form can do it: at best it gets three of the four quadrants right, whatever the loss.</p>`,
+  look:'<b>Try:</b> all three are stuck with stumps. Switch tree depth to 2 and press Play. Depth <span class="m">d</span> trees allow interactions among up to <span class="m">d</span> features.',
+  setup:{dataset:'xor', noise:0, depth:1, nuIdx:3, round:100}},
+ {title:'One stubborn outlier',
+  body:`<p>One <span class="m">y = −1</span> point (ringed) has been placed at the center of the <span class="m">y = +1</span> disc. Think of it as a mislabeled example: no sensible boundary should bend around it.</p>
+  <p>AdaBoost can’t let it go. Its weight is <span class="m">e<sup>−m</sup></span>, so while it stays misclassified its pull keeps climbing until a run of trees carves out a thin sliver of <span class="m">y = −1</span> territory around it. LogitBoost does the opposite: once <span class="m">p̂</span> is confidently wrong, the Newton weight <span class="m">p(1 − p)</span> is tiny, so it stops chasing the point and leaves it misclassified. Least squares fits it too, slowly, because its pull is the plain residual.</p>`,
+  look:'<b>Try:</b> scrub from round 0 to 200 and watch the center of each map, and the outlier’s pull under AdaBoost (hover it). Its margin shows as the dark dot on the tick rows. Then set clicking a map to add points and plant outliers of your own, or use the flipped-labels slider for random label noise.',
+  setup:{dataset:'ring', noise:0, depth:2, nuIdx:3, round:200, pts:[{x:[0, 0], y:-1}]}},
+ {title:'Probabilities and shrinkage',
+  body:`<p>Each loss is minimized, in the population, by a known function of <span class="m">p = P(y = +1 | x)</span>. Squared loss by <span class="m">f = 2p − 1</span>; exponential loss and deviance both by <span class="m">f = ½ ln(p/(1 − p))</span>. That’s why the panels turn <span class="m">f</span> into <span class="m">p̂</span> the way they do, and why AdaBoost can be read as a probability model at all.</p>
+  <p>On a finite sample, running long drives <span class="m">|f|</span> up and <span class="m">p̂</span> toward 0 or 1. These blobs overlap (about 12% of points are on the wrong side of the best possible boundary), so confident predictions are often wrong and test log loss punishes them.</p>`,
+  look:'<b>Try:</b> note the log loss curves at <span class="m">ν = 1</span>, then set the learning rate to 0.05. Smaller steps delay overfitting, which is why shrinkage plus early stopping on held-out data is standard practice.',
+  setup:{dataset:'blobs', noise:0, depth:2, nuIdx:5, round:200, metric:'ll'}}
+];
+
+/* ---------------- data + training ---------------- */
+function retrain(){
+  const tr = makeData(S.dataset, 150, S.seed, S.noise / 100);
+  const te = makeData(S.dataset, 1000, S.seed + 1009, S.noise / 100);
+  const X = tr.X.concat(S.userPts.map(p => p.x)), Y = tr.Y.concat(S.userPts.map(p => p.y));
+  D = {X, Y, Xt:te.X, Yt:te.Y, nBase:tr.X.length};
+  const nu = NUS[S.nuIdx];
+  MODELS = {};
+  for (const m of METHODS) MODELS[m] = trainOne(m, X, Y, te.X, te.Y, S.depth, nu);
+  rebuildGrids(); heatDirty = true;
+}
+
+/* ---------------- grids ---------------- */
+const G = 110, span = DOM[1] - DOM[0];
+const gx = new Float32Array(G), gy = new Float32Array(G);
+for (let i = 0; i < G; i++){ gx[i] = DOM[0] + (i + 0.5) / G * span; gy[i] = DOM[1] - (i + 0.5) / G * span; }
+const grids = {ls:new Float32Array(G * G), ada:new Float32Array(G * G), logit:new Float32Array(G * G)};
+let gridRound = 0, heatDirty = true;
+function addTree(m, k, sgn){
+  const {tree, scale} = MODELS[m].trees[k], g = grids[m], s = sgn * scale;
+  for (let j = 0; j < G; j++){ const y = gy[j], o = j * G; for (let i = 0; i < G; i++) g[o + i] += s * evalTree(tree, gx[i], y); }
+}
+function rebuildGrids(){
+  for (const m of METHODS){ grids[m].fill(0); for (let k = 1; k <= S.round; k++) addTree(m, k, 1); }
+  gridRound = S.round;
+}
+function syncGrids(){
+  if (Math.abs(S.round - gridRound) > S.round){ rebuildGrids(); heatDirty = true; return; }
+  while (gridRound < S.round){ gridRound++; for (const m of METHODS) addTree(m, gridRound, 1); heatDirty = true; }
+  while (gridRound > S.round){ for (const m of METHODS) addTree(m, gridRound, -1); gridRound--; heatDirty = true; }
+}
+
+/* ---------------- colors ---------------- */
+let C = {};
+function hex(s){ s = s.replace('#', ''); if (s.length === 3) s = s.split('').map(c => c + c).join(''); return [parseInt(s.slice(0,2),16), parseInt(s.slice(2,4),16), parseInt(s.slice(4,6),16)]; }
+function readColors(){
+  const cs = getComputedStyle(document.documentElement), g = n => cs.getPropertyValue(n).trim();
+  C = {pos:g('--pos'), neg:g('--neg'), ink:g('--ink'), ink2:g('--ink-2'), rule:g('--rule'), surface:g('--surface'),
+       wash:g('--wash'), ls:g('--ls'), ada:g('--ada'), logit:g('--logit')};
+  C.posR = hex(C.pos); C.negR = hex(C.neg); C.midR = hex(g('--heat-mid'));
+  heatDirty = true;
+}
+
+/* ---------------- panels ---------------- */
+const panelEls = {};
+function buildPanels(){
+  const host = document.getElementById('panels');
+  for (const m of METHODS){
+    const M = META[m], sec = document.createElement('section');
+    sec.className = 'panel';
+    sec.innerHTML = `<header class="ph"><span class="sw" style="background:var(--${m})"></span><h3>${M.name}</h3></header>
+      <dl class="rule"><dt>Loss</dt><dd>${M.loss}</dd><dt>Each tree fits</dt><dd>${M.fits}</dd><dt>Point size</dt><dd>${M.size}</dd><dt>Probability</dt><dd>${M.prob}</dd></dl>
+      <div class="cv-wrap"><canvas aria-label="${M.name} probability map"></canvas></div>
+      <div class="nums"><div><span class="k">Train error</span><span class="v" data-k="trainErr"></span></div>
+        <div><span class="k">Test error</span><span class="v" data-k="testErr"></span></div>
+        <div><span class="k">Test log loss</span><span class="v" data-k="testLL"></span></div></div>
+      <p class="latest"></p><p class="cursor"></p>`;
+    host.appendChild(sec);
+    const cv = sec.querySelector('canvas'), off = document.createElement('canvas');
+    off.width = G; off.height = G;
+    panelEls[m] = {sec, cv, off, latest:sec.querySelector('.latest'), cursor:sec.querySelector('.cursor'),
+      nums:[...sec.querySelectorAll('.v')]};
+    cv.addEventListener('pointermove', e => onHover(e, cv));
+    cv.addEventListener('pointerdown', e => onHover(e, cv));
+    cv.addEventListener('pointerleave', () => { S.hover = null; S.hoverPt = -1; drawLight(); });
+    cv.addEventListener('click', e => onClick(e, cv));
+  }
+}
+function sizeCanvas(cv){
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+  if (cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; }
+  return {w:r.width, h:r.height, dpr};
+}
+function paintHeat(m){
+  const off = panelEls[m].off, ctx = off.getContext('2d'), img = ctx.createImageData(G, G), g = grids[m];
+  const {posR, negR, midR} = C;
+  for (let k = 0; k < G * G; k++){
+    const p = probOf(m, g[k]), t = 2 * p - 1, a = Math.abs(t) * 0.6, c = t > 0 ? posR : negR;
+    img.data[4*k] = midR[0] + (c[0] - midR[0]) * a;
+    img.data[4*k+1] = midR[1] + (c[1] - midR[1]) * a;
+    img.data[4*k+2] = midR[2] + (c[2] - midR[2]) * a;
+    img.data[4*k+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+function pullShares(m){
+  const F = MODELS[m].Fs[S.round], n = D.Y.length, out = new Float64Array(n);
+  let s = 0;
+  for (let i = 0; i < n; i++){ out[i] = pullOf(m, D.Y[i], F[i]); s += out[i]; }
+  const mean = s / n || 1;
+  for (let i = 0; i < n; i++) out[i] /= mean;
+  return out;
+}
+function drawPanel(m, shares){
+  const P = panelEls[m], cv = P.cv, {w, dpr} = sizeCanvas(cv), ctx = cv.getContext('2d');
+  const Sz = w, px = x => (x - DOM[0]) / span * Sz, py = y => (DOM[1] - y) / span * Sz, cell = Sz / G;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(P.off, 0, 0, Sz, Sz);
+  // decision boundary along cell edges where sign of f changes
+  const g = grids[m];
+  ctx.beginPath();
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++){
+    const s = g[j*G+i] > 0;
+    if (i < G - 1 && (g[j*G+i+1] > 0) !== s){ ctx.moveTo((i+1)*cell, j*cell); ctx.lineTo((i+1)*cell, (j+1)*cell); }
+    if (j < G - 1 && (g[(j+1)*G+i] > 0) !== s){ ctx.moveTo(i*cell, (j+1)*cell); ctx.lineTo((i+1)*cell, (j+1)*cell); }
+  }
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 1.6; ctx.stroke();
+  // newest tree splits
+  if (S.showTree && S.round > 0){
+    ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = C.ink2; ctx.lineWidth = 1.1; ctx.beginPath();
+    (function rec(t, x0, x1, y0, y1){
+      if (!t.l) return;
+      if (t.f === 0){ ctx.moveTo(px(t.t), py(y1)); ctx.lineTo(px(t.t), py(y0)); rec(t.l, x0, t.t, y0, y1); rec(t.r, t.t, x1, y0, y1); }
+      else { ctx.moveTo(px(x0), py(t.t)); ctx.lineTo(px(x1), py(t.t)); rec(t.l, x0, x1, y0, t.t); rec(t.r, x0, x1, t.t, y1); }
+    })(MODELS[m].trees[S.round].tree, DOM[0], DOM[1], DOM[0], DOM[1]);
+    ctx.stroke(); ctx.restore();
+  }
+  // points
+  const F = MODELS[m].Fs[S.round], scale = Math.max(0.75, Sz / 420);
+  for (let i = 0; i < D.Y.length; i++){
+    const x = px(D.X[i][0]), y = py(D.X[i][1]), col = D.Y[i] > 0 ? C.pos : C.neg;
+    const r = S.sizePull ? Math.min(16, 1.4 + 2.3 * Math.sqrt(shares[i])) * scale : 3.4 * scale;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
+    const hollow = m === 'ls' && D.Y[i] * F[i] > 1;
+    if (hollow){ ctx.fillStyle = C.surface; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.stroke(); }
+    else { ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = C.surface; ctx.lineWidth = 0.9; ctx.stroke(); }
+    if (i >= D.nBase){ ctx.beginPath(); ctx.arc(x, y, r + 2.5, 0, 2 * Math.PI); ctx.strokeStyle = C.ink; ctx.lineWidth = 1.2; ctx.stroke(); }
+  }
+  // hover
+  if (S.hover){
+    const hx = px(S.hover[0]), hy = py(S.hover[1]);
+    ctx.save(); ctx.globalAlpha = 0.45; ctx.strokeStyle = C.ink; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.moveTo(hx, 0); ctx.lineTo(hx, Sz); ctx.moveTo(0, hy); ctx.lineTo(Sz, hy); ctx.stroke(); ctx.restore();
+  }
+  if (S.hoverPt >= 0){
+    const i = S.hoverPt, r = (S.sizePull ? Math.min(16, 1.4 + 2.3 * Math.sqrt(shares[i])) : 3.4) * scale;
+    ctx.beginPath(); ctx.arc(px(D.X[i][0]), py(D.X[i][1]), r + 4, 0, 2 * Math.PI);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.stroke();
+  }
+}
+const f2 = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(2);
+const pct = v => (v * 100).toFixed(1) + '%';
+function updateText(m, shares){
+  const P = panelEls[m], mod = MODELS[m], met = mod.met[S.round];
+  P.nums[0].textContent = pct(met.trainErr); P.nums[1].textContent = pct(met.testErr); P.nums[2].textContent = met.testLL.toFixed(3);
+  if (S.round === 0) P.latest.innerHTML = 'No trees yet. Press Step to add the first one.';
+  else {
+    const inf = mod.info[S.round];
+    if (m === 'ls') P.latest.innerHTML = `Tree ${S.round} was fit to residuals with mean <span class="m">|r|</span> = <b>${inf.meanAbsRes.toFixed(3)}</b>.`;
+    else if (m === 'ada') P.latest.innerHTML = `Tree ${S.round}: weighted error <b>${inf.err.toFixed(3)}</b>, <span class="m">β</span> = <b>${inf.beta.toFixed(2)}</b>. Largest weight was <b>${inf.maxShare.toFixed(1)}×</b> the average.`;
+    else P.latest.innerHTML = `Tree ${S.round} used mean Newton weight <span class="m">p(1 − p)</span> = <b>${inf.meanW < 0.001 ? inf.meanW.toExponential(1) : inf.meanW.toFixed(3)}</b> (0.25 means unsure everywhere).`;
+  }
+  if (S.hoverPt >= 0){
+    const i = S.hoverPt, F = mod.Fs[S.round][i], y = D.Y[i];
+    P.cursor.innerHTML = `Point with <span class="m">y</span> = <b>${y > 0 ? '+1' : '−1'}</b>: margin <span class="m">y·f</span> = <b>${f2(y * F)}</b>, <span class="m">p̂</span> = <b>${probOf(m, F).toFixed(2)}</b>, pull <b>${shares[i].toFixed(1)}×</b> average.`;
+  } else if (S.hover){
+    const i = Math.min(G - 1, Math.max(0, Math.floor((S.hover[0] - DOM[0]) / span * G)));
+    const j = Math.min(G - 1, Math.max(0, Math.floor((DOM[1] - S.hover[1]) / span * G)));
+    const F = grids[m][j * G + i];
+    P.cursor.innerHTML = `At (${f2(S.hover[0])}, ${f2(S.hover[1])}): <span class="m">f</span> = <b>${f2(F)}</b>, <span class="m">p̂</span>(y = +1) = <b>${probOf(m, F).toFixed(2)}</b>.`;
+  } else P.cursor.textContent = 'Hover the map to read p̂ anywhere, or hover a point to see its margin and pull.';
+}
+function onHover(e, cv){
+  const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  S.hover = [DOM[0] + x * span, DOM[1] - y * span];
+  let best = -1, bd = 10;
+  for (let i = 0; i < D.Y.length; i++){
+    const dx = (D.X[i][0] - S.hover[0]) / span * r.width, dy = (D.X[i][1] - S.hover[1]) / span * r.width, d = Math.hypot(dx, dy);
+    if (d < bd){ bd = d; best = i; }
+  }
+  S.hoverPt = best;
+  drawLight();
+}
+function onClick(e, cv){
+  if (S.addMode === 'off') return;
+  const r = cv.getBoundingClientRect(), x = DOM[0] + (e.clientX - r.left) / r.width * span, y = DOM[1] - (e.clientY - r.top) / r.height * span;
+  if (S.hoverPt >= D.nBase){ S.userPts.splice(S.hoverPt - D.nBase, 1); S.hoverPt = -1; }
+  else S.userPts.push({x:[clampD(x), clampD(y)], y:+S.addMode});
+  retrain(); renderAll();
+}
+
+/* ---------------- charts ---------------- */
+function setupChart(cv){
+  const {w, h, dpr} = sizeCanvas(cv), ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  ctx.font = '12px "IBM Plex Sans", system-ui, sans-serif';
+  return {ctx, w, h};
+}
+function drawMargin(){
+  const cv = document.getElementById('marginCv'), {ctx, w, h} = setupChart(cv);
+  const L = 100, R = 56, T = 12, B = 96, pw = w - L - R, ph = h - T - B;
+  const xm = v => L + (v + 3) / 6 * pw, ym = v => T + (1 - v / 4) * ph;
+  ctx.strokeStyle = C.rule; ctx.lineWidth = 1; ctx.fillStyle = C.ink2;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= 4; v++){ ctx.beginPath(); ctx.moveTo(L, ym(v)); ctx.lineTo(L + pw, ym(v)); ctx.stroke(); ctx.fillText(v, L - 8, ym(v)); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let v = -3; v <= 3; v++){ ctx.beginPath(); ctx.moveTo(xm(v), T); ctx.lineTo(xm(v), T + ph); ctx.stroke(); ctx.fillText(v === 0 ? '0' : f2(v).replace('.00', ''), xm(v), T + ph + 6); }
+  ctx.fillText('margin y·f', L + pw / 2, T + ph + 22);
+  ctx.save(); ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
+  // 0-1 loss
+  ctx.setLineDash([5, 4]); ctx.strokeStyle = C.ink2; ctx.lineWidth = 1.5; ctx.beginPath();
+  ctx.moveTo(xm(-3), ym(1)); ctx.lineTo(xm(0), ym(1)); ctx.lineTo(xm(0), ym(0)); ctx.lineTo(xm(3), ym(0)); ctx.stroke(); ctx.setLineDash([]);
+  const curve = (fn, col) => { ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.beginPath(); for (let k = 0; k <= 240; k++){ const v = -3 + 6 * k / 240, yy = Math.min(5, fn(v)); k ? ctx.lineTo(xm(v), ym(yy)) : ctx.moveTo(xm(v), ym(yy)); } ctx.stroke(); };
+  curve(v => (1 - v) ** 2, C.ls);
+  curve(v => Math.exp(-v), C.ada);
+  curve(v => Math.log1p(Math.exp(-2 * v)) / Math.LN2, C.logit);
+  ctx.restore();
+  // rugs
+  const rows = [['ls', 'Least squares'], ['ada', 'AdaBoost'], ['logit', 'LogitBoost']];
+  rows.forEach(([m, label], k) => {
+    const y0 = T + ph + 44 + k * 17, F = MODELS[m].Fs[S.round];
+    ctx.fillStyle = C.ink2; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText(label, L - 8, y0 + 5);
+    ctx.strokeStyle = C[m]; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.2; ctx.beginPath();
+    for (let i = 0; i < D.Y.length; i++){ const v = Math.max(-3, Math.min(3, D.Y[i] * F[i])); ctx.moveTo(xm(v), y0); ctx.lineTo(xm(v), y0 + 10); }
+    ctx.stroke(); ctx.globalAlpha = 1;
+    let lo = 0, hi = 0;
+    for (let i = 0; i < D.Y.length; i++){ const v = D.Y[i] * F[i]; if (v < -3) lo++; else if (v > 3) hi++; }
+    ctx.fillStyle = C.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    if (hi) ctx.fillText('+' + hi + ' >3', L + pw + 6, y0 + 5);
+    if (lo){ ctx.textAlign = 'left'; ctx.fillText(lo + ' <−3', L + 2, y0 - 4); }
+    if (S.hoverPt >= 0){
+      const v = Math.max(-3, Math.min(3, D.Y[S.hoverPt] * F[S.hoverPt]));
+      ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(xm(v), y0 + 5, 4, 0, 2 * Math.PI); ctx.fill();
+    }
+  });
+}
+let curveGeom = null;
+function drawCurve(){
+  const cv = document.getElementById('curveCv'), {ctx, w, h} = setupChart(cv);
+  const L = 48, R = 14, T = 14, B = 40, pw = w - L - R, ph = h - T - B;
+  const keyT = S.metric === 'err' ? 'testErr' : 'testLL', keyR = S.metric === 'err' ? 'trainErr' : 'trainLL';
+  let mx = 0;
+  for (const m of METHODS) MODELS[m].met.forEach((r, k) => { if (k >= 5) mx = Math.max(mx, r[keyT], r[keyR]); });
+  let top;
+  if (S.metric === 'err'){ top = Math.min(0.6, Math.ceil(Math.max(mx, 0.1) * 10) / 10); }
+  else { top = Math.min(2, Math.ceil(Math.max(mx, 0.4) * 4) / 4); }
+  const xr = v => L + v / M_MAX * pw, yr = v => T + (1 - Math.min(v, top) / top) * ph;
+  curveGeom = {L, pw};
+  ctx.strokeStyle = C.rule; ctx.lineWidth = 1; ctx.fillStyle = C.ink2;
+  const nt = 4;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let k = 0; k <= nt; k++){ const v = top * k / nt; ctx.beginPath(); ctx.moveTo(L, yr(v)); ctx.lineTo(L + pw, yr(v)); ctx.stroke();
+    ctx.fillText(S.metric === 'err' ? Math.round(v * 100) + '%' : v.toFixed(2), L - 8, yr(v)); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let v = 0; v <= M_MAX; v += 50) ctx.fillText(v, xr(v), T + ph + 6);
+  ctx.fillText('round', L + pw / 2, T + ph + 22);
+  ctx.save(); ctx.beginPath(); ctx.rect(L, T - 2, pw, ph + 4); ctx.clip();
+  for (const m of METHODS){
+    const met = MODELS[m].met;
+    ctx.strokeStyle = C[m];
+    ctx.setLineDash([4, 3]); ctx.lineWidth = 1.3; ctx.globalAlpha = 0.85; ctx.beginPath();
+    met.forEach((r, k) => k ? ctx.lineTo(xr(k), yr(r[keyR])) : ctx.moveTo(xr(k), yr(r[keyR]))); ctx.stroke();
+    ctx.setLineDash([]); ctx.lineWidth = 2.3; ctx.globalAlpha = 1; ctx.beginPath();
+    met.forEach((r, k) => k ? ctx.lineTo(xr(k), yr(r[keyT])) : ctx.moveTo(xr(k), yr(r[keyT]))); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(xr(S.round), T); ctx.lineTo(xr(S.round), T + ph); ctx.stroke();
+  for (const m of METHODS){ const v = MODELS[m].met[S.round][keyT]; ctx.fillStyle = C[m]; ctx.beginPath(); ctx.arc(xr(S.round), yr(v), 4.2, 0, 2 * Math.PI); ctx.fill(); ctx.strokeStyle = C.surface; ctx.lineWidth = 1.5; ctx.stroke(); }
+}
+
+/* ---------------- render ---------------- */
+function drawLight(){
+  const sh = {};
+  for (const m of METHODS){ sh[m] = pullShares(m); drawPanel(m, sh[m]); updateText(m, sh[m]); }
+  drawMargin();
+}
+function renderAll(){
+  syncGrids();
+  if (heatDirty){ for (const m of METHODS) paintHeat(m); heatDirty = false; }
+  drawLight(); drawCurve();
+  document.getElementById('roundSlider').value = S.round;
+  document.getElementById('roundOut').textContent = S.round;
+}
+function setRound(r){ S.round = Math.max(0, Math.min(M_MAX, r)); renderAll(); }
+
+/* ---------------- controls ---------------- */
+function segInit(id, key, cb){
+  const el = document.getElementById(id);
+  el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S[key] = b.dataset.v; syncControls(); cb && cb(); });
+}
+function syncControls(){
+  const setSeg = (id, v) => document.querySelectorAll('#' + id + ' button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === String(v))));
+  setSeg('dsSeg', S.dataset); setSeg('depthSeg', S.depth); setSeg('addSeg', S.addMode); setSeg('metricSeg', S.metric);
+  document.getElementById('noise').value = S.noise; document.getElementById('noiseOut').textContent = S.noise + '%';
+  document.getElementById('nu').value = S.nuIdx; document.getElementById('nuOut').textContent = NUS[S.nuIdx];
+  document.getElementById('showTree').checked = S.showTree; document.getElementById('sizePull').checked = S.sizePull;
+  document.querySelectorAll('.cv-wrap canvas').forEach(c => c.style.cursor = S.addMode === 'off' ? 'crosshair' : 'copy');
+}
+function stopPlay(){ S.playing = false; document.getElementById('playBtn').textContent = 'Play'; }
+let lastT = 0;
+function tick(t){
+  if (!S.playing) return;
+  if (t - lastT > 50){ lastT = t; if (S.round < M_MAX) setRound(S.round + 1); else { stopPlay(); return; } }
+  requestAnimationFrame(tick);
+}
+function wire(){
+  segInit('dsSeg', 'dataset', () => { S.userPts = []; retrain(); renderAll(); });
+  segInit('depthSeg', 'depth', () => { S.depth = +S.depth; retrain(); renderAll(); });
+  segInit('addSeg', 'addMode');
+  segInit('metricSeg', 'metric', drawCurve);
+  const noise = document.getElementById('noise');
+  noise.addEventListener('input', () => { S.noise = +noise.value; document.getElementById('noiseOut').textContent = S.noise + '%'; });
+  noise.addEventListener('change', () => { S.noise = +noise.value; retrain(); renderAll(); });
+  const nu = document.getElementById('nu');
+  nu.addEventListener('input', () => { S.nuIdx = +nu.value; document.getElementById('nuOut').textContent = NUS[S.nuIdx]; retrain(); renderAll(); });
+  document.getElementById('reseed').addEventListener('click', () => { S.seed = (S.seed * 7919 + 13) % 100003; retrain(); renderAll(); });
+  document.getElementById('showTree').addEventListener('change', e => { S.showTree = e.target.checked; drawLight(); });
+  document.getElementById('sizePull').addEventListener('change', e => { S.sizePull = e.target.checked; drawLight(); });
+  const rs = document.getElementById('roundSlider');
+  rs.addEventListener('input', () => { stopPlay(); setRound(+rs.value); });
+  document.getElementById('stepBtn').addEventListener('click', () => { stopPlay(); setRound(S.round + 1); });
+  document.getElementById('backBtn').addEventListener('click', () => { stopPlay(); setRound(S.round - 1); });
+  document.getElementById('playBtn').addEventListener('click', () => {
+    if (S.playing){ stopPlay(); return; }
+    if (S.round >= M_MAX) setRound(0);
+    S.playing = true; document.getElementById('playBtn').textContent = 'Pause'; requestAnimationFrame(tick);
+  });
+  const cc = document.getElementById('curveCv');
+  const seek = e => { if (!curveGeom) return; const r = cc.getBoundingClientRect(); stopPlay(); setRound(Math.round((e.clientX - r.left - curveGeom.L) / curveGeom.pw * M_MAX)); };
+  let drag = false;
+  cc.addEventListener('pointerdown', e => { drag = true; cc.setPointerCapture(e.pointerId); seek(e); });
+  cc.addEventListener('pointermove', e => { if (drag) seek(e); });
+  cc.addEventListener('pointerup', () => drag = false);
+  // tour
+  document.getElementById('setupBtn').addEventListener('click', applyLesson);
+  document.getElementById('prevBtn').addEventListener('click', () => gotoLesson(S.lesson - 1, true));
+  document.getElementById('nextBtn').addEventListener('click', () => gotoLesson(S.lesson + 1, true));
+  // theme + resize
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  mq.addEventListener && mq.addEventListener('change', () => { readColors(); renderAll(); });
+  new MutationObserver(() => { readColors(); renderAll(); }).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+  let raf = 0;
+  new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { drawLight(); drawCurve(); }); }).observe(document.querySelector('.lab'));
+}
+
+/* ---------------- tour ---------------- */
+function renderTour(){
+  const steps = document.getElementById('steps');
+  steps.innerHTML = LESSONS.map((l, i) => `<li><button type="button" data-i="${i}" title="${l.title}" aria-label="Lesson ${i + 1}: ${l.title}" ${i === S.lesson ? 'aria-current="step"' : ''} class="${S.seen.has(i) ? 'seen' : ''}">${i + 1}</button></li>`).join('');
+  const L = LESSONS[S.lesson];
+  document.getElementById('lesson').innerHTML = `<h3>${L.title}</h3>${L.body}<p class="look">${L.look}</p>`;
+  document.getElementById('tourCount').textContent = `${S.lesson + 1} of ${LESSONS.length}`;
+  document.getElementById('prevBtn').disabled = S.lesson === 0;
+  document.getElementById('nextBtn').disabled = S.lesson === LESSONS.length - 1;
+}
+function gotoLesson(i, apply){
+  S.lesson = Math.max(0, Math.min(LESSONS.length - 1, i)); S.seen.add(S.lesson);
+  renderTour(); if (apply) applyLesson();
+}
+function applyLesson(){
+  const s = LESSONS[S.lesson].setup;
+  stopPlay();
+  S.dataset = s.dataset; S.noise = s.noise; S.depth = s.depth; S.nuIdx = s.nuIdx; S.round = s.round;
+  S.userPts = (s.pts || []).map(p => ({x:p.x.slice(), y:p.y}));
+  if (s.metric) S.metric = s.metric;
+  S.showTree = true; S.sizePull = true; S.addMode = 'off';
+  syncControls(); retrain(); renderAll();
+}
+
+/* ---------------- boot ---------------- */
+buildPanels(); wire();
+document.getElementById('steps').addEventListener('click', e => { const b = e.target.closest('button'); if (b) gotoLesson(+b.dataset.i, true); });
+readColors(); renderTour(); syncControls(); applyLesson();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { drawLight(); drawCurve(); });
+</script>
+
+</body></html>
